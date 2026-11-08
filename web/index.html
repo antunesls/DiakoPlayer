@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="referrer" content="no-referrer">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>DiakoPlayer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="player">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l10.6-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm7 0h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M5.5 5.6v12.8a1 1 0 0 0 1.55.83L15.5 13.2a1.4 1.4 0 0 0 0-2.4L7.05 4.77A1 1 0 0 0 5.5 5.6zM17 5h2v14h-2z"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18.5 5.6v12.8a1 1 0 0 1-1.55.83L8.5 13.2a1.4 1.4 0 0 1 0-2.4l8.45-6.03a1 1 0 0 1 1.55.83zM5 5h2v14H5z"/></symbol>
+    <symbol id="i-back10" viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/><text x="12" y="16.3" font-size="6.5" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">10</text></symbol>
+    <symbol id="i-fwd10" viewBox="0 0 24 24"><path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/><text x="12" y="16.3" font-size="6.5" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">10</text></symbol>
+    <symbol id="i-like" viewBox="0 0 24 24"><path d="M2 21h3V9H2v12zm20-11a2 2 0 0 0-2-2h-6.3l.95-4.57.03-.32a1.5 1.5 0 0 0-.44-1.06L13.17 1 6.59 7.59A2 2 0 0 0 6 9v10a2 2 0 0 0 2 2h9a2 2 0 0 0 1.84-1.22l3.02-7.05A2 2 0 0 0 22 12v-2z"/></symbol>
+    <symbol id="i-dislike" viewBox="0 0 24 24"><path d="M22 3h-3v12h3V3zM2 14a2 2 0 0 0 2 2h6.3l-.95 4.57-.03.32c0 .41.17.79.44 1.06L10.83 23l6.58-6.59A2 2 0 0 0 18 15V5a2 2 0 0 0-2-2H7a2 2 0 0 0-1.84 1.22L2.14 11.27A2 2 0 0 0 2 12v2z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></symbol>
+    <symbol id="i-repeat1" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 0 0 .05-.94 7 7 0 0 0-.05-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.48.48 0 0 0 13.93 2h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.47a.48.48 0 0 0 .12.61l2.03 1.58a7.4 7.4 0 0 0 0 1.88l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24"><path d="M3 6h12v2H3zm0 4h12v2H3zm0 4h8v2H3zm14-1v6l5-3z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></symbol>
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+    <symbol id="i-playnext" viewBox="0 0 24 24"><path d="M2 5h12v2H2zm0 4h12v2H2zm0 4h8v2H2zm14-4v4h-4v2h4v4h2v-4h4v-2h-4V9z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-4a5 5 0 0 0-3.54 8.54l1.42-1.42a3 3 0 1 1 4.24 0l1.42 1.42A5 5 0 0 0 12 7zm0-4a9 9 0 0 0-6.36 15.36l1.41-1.41a7 7 0 1 1 9.9 0l1.41 1.41A9 9 0 0 0 12 3z"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="brand"><img src="brand/simbolo-ambar.png" alt="Diakonia"><span class="brand-text">DIAKO<span>PLAYER</span></span></div>
+  <button class="status" id="connBtn" title="Conexão">
+    <span class="dot" id="connDot"></span>
+    <span id="connName">Sem conexão</span>
+    <span class="live" id="liveTag" hidden>· AO VIVO</span>
+  </button>
+  <button class="icon-btn" id="settingsBtn" title="Configurações" aria-label="Configurações"><svg><use href="#i-gear"/></svg></button>
+</header>
+
+<main class="layout">
+  <section class="view player" id="view-player" aria-label="Controle">
+    <div class="now card">
+      <div class="cover">
+        <img id="art" alt="" referrerpolicy="no-referrer" hidden>
+        <div id="artEmpty" class="cover-empty"><img src="brand/simbolo-claro.png" alt=""></div>
+      </div>
+      <div class="now-text">
+        <div class="eyebrow accent" id="nowLabel">TOCANDO AGORA</div>
+        <div class="title" id="title">Nada tocando</div>
+        <div class="artist" id="artist">Escolha uma música no PC ou busque aqui</div>
+      </div>
+      <div class="rate">
+        <button class="icon-btn" data-action="like" id="likeBtn" title="Gostei (L)" aria-label="Gostei"><svg><use href="#i-like"/></svg></button>
+        <button class="icon-btn" data-action="dislike" id="dislikeBtn" title="Não gostei (D)" aria-label="Não gostei"><svg><use href="#i-dislike"/></svg></button>
+      </div>
+    </div>
+
+    <div class="progress">
+      <div class="times"><span id="cur">0:00</span><span id="remain" class="dim">−0:00</span></div>
+      <input type="range" id="seek" min="0" max="100" step="1" value="0" aria-label="Posição na música">
+    </div>
+
+    <div class="grid3">
+      <button class="pad" data-action="back10" title="Voltar 10s (←)">−10 s</button>
+      <button class="pad" data-action="prev" title="Anterior (P)" aria-label="Faixa anterior"><svg><use href="#i-prev"/></svg></button>
+      <button class="pad" data-action="fwd10" title="Avançar 10s (→)">+10 s</button>
+    </div>
+
+    <div class="grid3">
+      <button class="pad big primary span2" data-action="toggle" id="playBtn" title="Tocar/pausar (espaço)">
+        <svg><use id="playIcon" href="#i-play"/></svg><span id="playLabel">TOCAR</span>
+      </button>
+      <button class="pad big alt col" data-action="next" title="Próxima (N)">
+        <svg><use href="#i-next"/></svg><span>PRÓXIMA</span>
+      </button>
+    </div>
+
+    <div class="volume card">
+      <button class="pad sq" id="volDown" aria-label="Diminuir volume">−</button>
+      <div class="vol-mid">
+        <div class="eyebrow">VOLUME DO PC</div>
+        <div class="vol-val" id="volVal">–</div>
+        <div class="vol-bar" id="volBar" role="group" aria-label="Nível de volume"></div>
+      </div>
+      <button class="pad sq" id="volUp" aria-label="Aumentar volume">+</button>
+    </div>
+
+    <div class="grid2">
+      <button class="pad mid" data-action="mute" id="muteBtn" title="Mudo (M)"><span id="muteLabel">Silenciar</span></button>
+      <button class="pad mid outline" data-action="fade" id="fadeBtn" title="Abaixa o volume aos poucos e pausa (F)"><span id="fadeLabel">Baixar aos poucos</span></button>
+    </div>
+
+    <div class="grid2">
+      <button class="pad mid" data-action="shuffle" id="shuffleBtn" title="Aleatório (S)"><svg><use href="#i-shuffle"/></svg>Aleatório</button>
+      <button class="pad mid" data-action="repeat" id="repeatBtn" title="Repetir (R)"><svg><use id="repeatIcon" href="#i-repeat"/></svg><span id="repeatLabel">Repetir</span></button>
+    </div>
+
+    <div class="upnext card">
+      <div class="upnext-head">
+        <span class="eyebrow">A SEGUIR</span>
+        <button class="link" data-tab="queue">Ver fila e buscar</button>
+      </div>
+      <ul id="upNextList"></ul>
+    </div>
+  </section>
+
+  <section class="view panel" id="view-panel">
+    <nav class="panel-tabs">
+      <button data-tab="queue" class="ptab">Fila</button>
+      <button data-tab="search" class="ptab">Buscar</button>
+    </nav>
+
+    <div class="pane" id="pane-queue">
+      <div class="pane-head">
+        <span id="queueInfo" class="eyebrow">FILA</span>
+        <span class="spacer"></span>
+        <button class="chip" id="queueRefresh"><svg><use href="#i-refresh"/></svg>Atualizar</button>
+        <button class="chip danger" id="queueClear"><svg><use href="#i-trash"/></svg>Limpar</button>
+      </div>
+      <ol class="list" id="queueList"></ol>
+    </div>
+
+    <div class="pane" id="pane-search">
+      <form class="search-form" id="searchForm" autocomplete="off">
+        <svg><use href="#i-search"/></svg>
+        <input type="search" id="searchInput" placeholder="Músicas, artistas ou link do YouTube" enterkeyhint="search">
+      </form>
+      <ol class="list" id="searchList"></ol>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-tab="player"><svg><use href="#i-music"/></svg><span>Controle</span></button>
+  <button data-tab="queue"><svg><use href="#i-queue"/></svg><span>Fila</span></button>
+  <button data-tab="search"><svg><use href="#i-search"/></svg><span>Buscar</span></button>
+</nav>
+
+<dialog id="settings" class="sheet">
+  <div class="sheet-head">
+    <h2>Conexão</h2>
+    <button class="icon-btn" id="settingsClose" aria-label="Fechar"><svg><use href="#i-close"/></svg></button>
+  </div>
+
+  <section id="discoverSec" hidden>
+    <div class="sec-head">
+      <h3>PCs na rede</h3>
+      <button class="chip" id="discoverBtn"><svg><use href="#i-radar"/></svg>Procurar</button>
+    </div>
+    <ul class="conn-list" id="discoverList"></ul>
+  </section>
+
+  <section>
+    <h3>Players salvos</h3>
+    <ul class="conn-list" id="connList"></ul>
+  </section>
+
+  <section>
+    <h3>Adicionar player</h3>
+    <form id="addForm" class="add-form" autocomplete="off">
+      <input id="addUrl" placeholder="Endereço do PC, ex.: 192.168.0.10" required inputmode="url">
+      <input id="addName" placeholder="Nome (opcional), ex.: PC da sala">
+      <button class="primary-btn" type="submit">Adicionar e conectar</button>
+    </form>
+    <p class="hint">Porta padrão: 26538. Também funciona com o <b>pear-desktop</b> (plugin API Server ligado).</p>
+  </section>
+
+  <section>
+    <h3>Este aparelho</h3>
+    <label class="switch"><input type="checkbox" id="keepAwake"> Manter a tela ligada</label>
+    <label class="switch">Duração do "Baixar aos poucos":
+      <select id="fadeSecs">
+        <option value="3">3 s</option>
+        <option value="5">5 s</option>
+        <option value="8">8 s</option>
+        <option value="12">12 s</option>
+      </select>
+    </label>
+    <button class="chip" id="forgetToken">Refazer autorização no player atual</button>
+    <p class="hint" id="clientIdHint"></p>
+  </section>
+
+  <footer class="sheet-brand">
+    <img src="brand/logo-claro.png" alt="Igreja Diakonia Tulipas">
+  </footer>
+</dialog>
+
+<div class="overlay" id="authOverlay" hidden>
+  <div class="overlay-card">
+    <div class="spinner"></div>
+    <h2>Aprove no PC</h2>
+    <p>Uma janela apareceu no computador pedindo permissão para este aparelho controlar o player. Clique em <b>Permitir</b>.</p>
+    <button class="chip" id="authCancel">Cancelar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

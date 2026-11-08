@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Conectar celular</title>
+<style>
+  :root { color-scheme: dark; --bg:#121212; --card:#1e1e1e; --muted:#aaa; --accent:#ff2d55; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:#fff; font:14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p { color:var(--muted); margin:0 0 14px; }
+  .qr { display:flex; justify-content:center; background:#fff; border-radius:14px; padding:10px; width:300px; margin:0 auto 14px; }
+  .qr img { width:280px; height:280px; image-rendering:pixelated; }
+  .card { background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  .url { font:600 15px ui-monospace, Consolas, monospace; color:#fff; text-decoration:none; display:block; padding:3px 0; cursor:pointer; }
+  .url small { font:12px "Segoe UI", sans-serif; color:var(--muted); margin-left:6px; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0; }
+  .client { font:12px ui-monospace, Consolas, monospace; color:#ddd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  button { background:#333; color:#fff; border:0; border-radius:999px; padding:5px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#444; }
+  .err { color:#ff6b6b; }
+  label { display:flex; gap:8px; align-items:center; cursor:pointer; }
+  input[type=checkbox] { accent-color: var(--accent); width:16px; height:16px; }
+</style>
+</head>
+<body>
+  <img src="../assets/logo-claro.png" alt="Igreja Diakonia Tulipas" style="display:block;width:220px;margin:0 auto 16px;opacity:.85">
+  <h1>Conectar celular</h1>
+  <p>Aponte a câmera do celular para o QR code, ou abra o app DiakoPlayer no Android: ele encontra este PC sozinho na mesma rede Wi-Fi.</p>
+  <div class="qr"><img id="qr" alt="QR code do endereço do controle"></div>
+  <div class="card" id="addrs"></div>
+  <div class="card">
+    <label><input type="checkbox" id="auth"> Exigir aprovação de novos aparelhos</label>
+  </div>
+  <div class="card">
+    <div class="row"><strong>Aparelhos autorizados</strong><span id="conn" style="color:var(--muted)"></span></div>
+    <div id="clients"></div>
+  </div>
+  <p id="err" class="err"></p>
+<script>
+  const $ = (id) => document.getElementById(id);
+  function render(info) {
+    $('qr').src = info.qr;
+    $('addrs').innerHTML = '';
+    if (!info.addresses.length) $('addrs').textContent = 'Nenhuma rede encontrada. Conecte o PC ao Wi-Fi/cabo.';
+    info.addresses.forEach((a) => {
+      const el = document.createElement('a');
+      el.className = 'url';
+      el.textContent = a.url;
+      const s = document.createElement('small');
+      s.textContent = a.name;
+      el.appendChild(s);
+      el.onclick = () => diakoPair.open(a.url);
+      $('addrs').appendChild(el);
+    });
+    $('auth').checked = info.authEnabled;
+    $('conn').textContent = info.connected ? `${info.connected} conectado(s) agora` : '';
+    $('clients').innerHTML = '';
+    if (!info.clients.length) {
+      const p = document.createElement('div');
+      p.className = 'client';
+      p.textContent = 'Nenhum ainda.';
+      $('clients').appendChild(p);
+    }
+    info.clients.forEach((id) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const name = document.createElement('span');
+      name.className = 'client';
+      name.textContent = id;
+      const b = document.createElement('button');
+      b.textContent = 'Remover';
+      b.onclick = async () => render(await diakoPair.revoke(id));
+      row.append(name, b);
+      $('clients').appendChild(row);
+    });
+    $('err').textContent = info.serverError || '';
+  }
+  $('auth').onchange = async (e) => render(await diakoPair.setAuth(e.target.checked));
+  const refresh = async () => render(await diakoPair.info());
+  refresh();
+  setInterval(refresh, 3000);
+</script>
+</body>
+</html>
