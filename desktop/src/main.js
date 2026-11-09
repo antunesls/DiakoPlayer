@@ -16,6 +16,7 @@ const QRCode = require('qrcode');
 
 const config = require('./config');
 const { createServer } = require('./server');
+const { createHub } = require('./diakohub');
 const { startDiscovery, lanAddresses } = require('./discovery');
 
 const VERSION = app.getVersion();
@@ -38,8 +39,12 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let win = null;
 let pairWin = null;
+let hubWin = null;
 let tray = null;
 let server = null;
+let hub = null;
+// Ao abrir a 1ª música do louvor por URL (sem fila no YouTube Music), segura o play até montar a fila.
+let holdOnNextLoad = false;
 let stopDiscovery = null;
 let quitting = false;
 let playerState = null;
@@ -56,7 +61,7 @@ function rpc(method, ...args) {
     const timeout = setTimeout(() => {
       pending.delete(id);
       reject(Object.assign(new Error('O player não respondeu (a página ainda está carregando?)'), { status: 503 }));
-    }, method === 'search' || method === 'addToQueue' || method === 'playSong' ? 15000 : 4000);
+    }, method === 'loadSetlist' ? 30000 : method === 'search' || method === 'addToQueue' || method === 'playSong' ? 15000 : 4000);
     pending.set(id, { resolve, reject, timeout });
     win.webContents.send('diako:rpc', { id, method, args });
   });
@@ -100,6 +105,10 @@ function createWindow() {
   });
 
   win.webContents.on('dom-ready', () => {
+    if (holdOnNextLoad) {
+      holdOnNextLoad = false;
+      win.webContents.executeJavaScript('window.__diakoHoldUntil = Date.now() + 30000;').catch(() => {});
+    }
     win.webContents.executeJavaScript(INJECT_CODE).catch((e) => console.error('[inject]', e));
     win.webContents
       .executeJavaScript(`window.__diakoAutoDismiss = ${!!config.get('autoDismissYouThere')};`)
@@ -208,6 +217,62 @@ async function askApproval(id, address) {
   return response === 0;
 }
 
+// ---------------- louvor (DiakoHub) ----------------
+/** Monta a fila com as músicas do louvor e deixa a 1ª pausada. Nunca começa a tocar sozinho. */
+async function loadSetlist(ids) {
+  const r = await rpc('loadSetlist', ids);
+  if (r !== 'navigate') return r;
+  // Nada carregado no YouTube Music ainda: abre a 1ª música (segurada) e depois monta o resto.
+  holdOnNextLoad = true;
+  win.loadURL(`https://music.youtube.com/watch?v=${ids[0]}`);
+  const limite = Date.now() + 30000;
+  while (Date.now() < limite && playerState?.song?.videoId !== ids[0]) {
+    await new Promise((res) => setTimeout(res, 300));
+  }
+  if (playerState?.song?.videoId !== ids[0]) {
+    throw Object.assign(new Error('O YouTube Music demorou a abrir a 1ª música. Tente de novo.'), { status: 503 });
+  }
+  await new Promise((res) => setTimeout(res, 800));
+  const again = await rpc('loadSetlist', ids);
+  if (again === 'navigate') throw Object.assign(new Error('Não foi possível montar a fila. Tente de novo.'), { status: 503 });
+  return again;
+}
+
+function openHubWindow() {
+  if (hubWin && !hubWin.isDestroyed()) return hubWin.focus();
+  hubWin = new BrowserWindow({
+    width: 480,
+    height: 640,
+    resizable: false,
+    title: 'Integração DiakoHub — DiakoPlayer',
+    icon: path.join(ASSETS, 'icon.png'),
+    backgroundColor: '#111418',
+    autoHideMenuBar: true,
+    parent: win?.isVisible() ? win : undefined,
+    webPreferences: {
+      preload: path.join(__dirname, 'hub-preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+  hubWin.loadFile(path.join(__dirname, 'hub.html'));
+}
+
+const hubError = (e) => ({ ...hub.info(), error: e.message });
+ipcMain.handle('hub:info', () => hub.info());
+ipcMain.handle('hub:connect', async (_e, dados) => {
+  try {
+    return await hub.connect(dados || {});
+  } catch (e) {
+    return hubError(e);
+  }
+});
+ipcMain.handle('hub:disconnect', () => hub.disconnect());
+ipcMain.handle('hub:refresh', async () => {
+  await hub.refresh(true);
+  return hub.info();
+});
+
 // ---------------- bandeja e menu ----------------
 function updateTray() {
   if (!tray) return;
@@ -237,6 +302,7 @@ function buildAppMenu() {
         label: 'DiakoPlayer',
         submenu: [
           { label: 'Conectar celular (QR code)…', accelerator: 'CmdOrCtrl+Shift+C', click: openPairWindow },
+          { label: 'Integração DiakoHub (escala do louvor)…', click: openHubWindow },
           {
             label: 'Abrir controle web neste PC',
             click: () => shell.openExternal(`http://localhost:${config.get('port')}/`),
@@ -295,7 +361,11 @@ app.whenReady().then(async () => {
   tray.on('click', showWindow);
   updateTray();
 
+  hub = createHub({ getConfig: () => config.get(), setConfig: (p) => config.set(p) });
+
   server = createServer({
+    hub,
+    loadSetlist,
     getConfig: () => config.get(),
     setConfig: (p) => config.set(p),
     rpc,
@@ -326,6 +396,7 @@ app.on('before-quit', () => {
   quitting = true;
   globalShortcut.unregisterAll();
   server?.close();
+  hub?.stop();
   stopDiscovery?.();
 });
 

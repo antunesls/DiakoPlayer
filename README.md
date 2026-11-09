@@ -61,13 +61,30 @@ Tocar/pausar, anterior/próxima, ±10 s, barra de progresso arrastável, gostei/
 **busca** no catálogo do YouTube Music (tocar agora, tocar a seguir, adicionar ao fim; aceita colar link do YouTube),
 várias conexões salvas, capa desfocada de fundo, atalhos de teclado (`espaço`, `N`, `P`, `←/→`, `↑/↓`, `L`, `D`, `S`, `R`, `M`, `/`).
 
+## Escala do louvor (DiakoHub)
+O player mostra a escala do louvor e as músicas escolhidas no [DiakoHub](https://github.com/antunesls/diakohub), na aba **Culto** do controle.
+
+1. No DiakoHub, em **/admin › Usuários e perfis**, crie um usuário com o perfil **DiakoPlayer**. Esse perfil só lê escalas e repertório e não entra no painel.
+2. No PC, abra **DiakoPlayer › Integração DiakoHub** e informe o endereço do DiakoHub, o usuário e a senha. Só o PC fala com o DiakoHub. A senha fica cifrada no PC e serve apenas para renovar a sessão.
+3. (Opcional) Em **/admin › DiakoPlayer** no DiakoHub, informe o endereço do controle (ex.: `http://192.168.0.20:26538`). Assim aparece o botão **Abrir no DiakoPlayer** nas músicas da escala, que abre o controle já no culto certo.
+
+Na aba **Culto**:
+- aparecem os cultos de hoje em diante, com a equipe do louvor e as músicas na ordem do ministro, cada uma com o **tom** e o BPM;
+- **Montar a fila do louvor** troca a fila pelas músicas do culto e deixa a 1ª pronta e **pausada**. Nada toca até alguém apertar **Tocar** (no controle, nas teclas de mídia, na bandeja ou na janela do player). Isso vale também para os anúncios de quem não tem Premium;
+- música sem link do YouTube no repertório não entra na fila e ganha um botão para buscá-la no YouTube Music;
+- na tela Controle, o rótulo mostra a posição no louvor (ex.: `TOCANDO AGORA · LOUVOR 2/5 · TOM D`);
+- na aba **Buscar**, a opção **Repertório da igreja** pesquisa só nas músicas aprovadas, já com o tom;
+- o PC atualiza a escala a cada 5 minutos e guarda uma cópia: se o DiakoHub cair, a última escala continua aparecendo.
+
 ## API
 Compatível com o plugin **API Server** do pear-desktop (`/api/v1/...`, mesmo formato de WebSocket e de autenticação
 `POST /auth/{id}` → `{accessToken}`; use `Authorization: Bearer <token>`). Assim:
 - o APK/web também controla um pear-desktop com o API Server ligado;
 - ferramentas feitas para o pear-desktop (como o ytm-remote) funcionam com o DiakoPlayer.
 
-Extras do DiakoPlayer: `GET /api/v1/info`, `POST /api/v1/play-song {videoId}` e o evento WebSocket `LIKE_CHANGED`.
+Extras do DiakoPlayer: `GET /api/v1/info`, `POST /api/v1/play-song {videoId}`, o evento WebSocket `LIKE_CHANGED` e,
+para o louvor, `GET /api/v1/culto` (`?refresh=1` busca de novo no DiakoHub), `GET /api/v1/repertorio` e
+`POST /api/v1/queue/load {videoIds: [...]}` (troca a fila e deixa a 1ª música pausada).
 
 Pedidos vindos do próprio PC (`localhost`) não precisam de autorização. Aparelhos autorizados ficam listados
 na janela "Conectar celular", onde também dá para removê-los ou desligar a exigência de aprovação.

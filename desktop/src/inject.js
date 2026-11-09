@@ -153,13 +153,73 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // "Segurar": enquanto a fila do louvor é montada, qualquer início de reprodução é pausado na hora.
+  // Quem dá o play é sempre uma pessoa (botão Tocar), que desfaz a trava.
+  const holding = () => Date.now() < (window.__diakoHoldUntil || 0);
+  const hold = (ms) => (window.__diakoHoldUntil = Date.now() + ms);
+  const release = () => (window.__diakoHoldUntil = 0);
+  const holdPlayback = (e) => {
+    if (!holding() || !(e.target instanceof HTMLMediaElement)) return;
+    e.target.pause();
+    safe(() => api().pauseVideo());
+  };
+  document.addEventListener('play', holdPlayback, true);
+  document.addEventListener('playing', holdPlayback, true);
+  // Alguém mexeu na janela do player no PC (clique ou tecla de verdade): a decisão é dela, solta a trava.
+  const releaseOnInput = (e) => e.isTrusted && holding() && release();
+  document.addEventListener('pointerdown', releaseOnInput, true);
+  document.addEventListener('keydown', releaseOnInput, true);
+
+  /** Troca a fila pelas músicas do louvor, na ordem, e deixa a primeira pronta e pausada. */
+  async function loadSetlist(videoIds) {
+    const queue = queueEl();
+    const app = appEl();
+    const store = safe(() => queue.queue.store.store);
+    if (!app || !store || !getSong()) return 'navigate';
+    hold(20000);
+    safe(() => api().pauseVideo());
+    const result = await app.networkManager.fetch('/music/get_queue', {
+      queueContextParams: store.getState().queue.queueContextParams,
+      queueInsertPosition: 'INSERT_AT_END',
+      videoIds,
+    });
+    const items = ((result && result.queueDatas) || []).map((it) => (it && it.content) || null).filter(Boolean);
+    if (!items.length) {
+      release();
+      throw new Error('O YouTube Music não encontrou as músicas do louvor');
+    }
+    queue.dispatch({ type: 'CLEAR' });
+    await sleep(100);
+    queue.dispatch({
+      type: 'ADD_ITEMS',
+      payload: {
+        nextQueueItemId: store.getState().queue.nextQueueItemId,
+        index: 0,
+        items,
+        shuffleEnabled: false,
+        shouldAssignIds: true,
+      },
+    });
+    await sleep(200);
+    queue.dispatch({ type: 'SET_INDEX', payload: 0 });
+    // Espera a 1ª música entrar no player (e continua pausando enquanto isso).
+    for (let i = 0; i < 40 && safe(() => getSong().videoId) !== videoIds[0]; i++) await sleep(200);
+    await sleep(600);
+    safe(() => api().pauseVideo());
+    // Fica travado até alguém dar o play (Tocar, teclas de mídia, bandeja ou a própria janela):
+    // sem conta Premium, o YouTube Music começaria sozinho o anúncio e, depois dele, a música.
+    hold(Number.MAX_SAFE_INTEGER);
+    return { loaded: items.length, first: safe(() => getSong().videoId) };
+  }
+
   const handlers = {
     getState,
-    previous: () => click('.previous-button.ytmusic-player-bar'),
-    next: () => click('.next-button.ytmusic-player-bar'),
-    play: () => api() && api().playVideo(),
+    previous: () => (release(), click('.previous-button.ytmusic-player-bar')),
+    next: () => (release(), click('.next-button.ytmusic-player-bar')),
+    play: () => (release(), api() && api().playVideo()),
     pause: () => api() && api().pauseVideo(),
     togglePlay: () => {
+      release();
       const p = api();
       if (!p) return;
       if (p.getPlayerState() === 1) p.pauseVideo();
@@ -200,10 +260,11 @@
       };
     },
     addToQueue,
+    loadSetlist,
     moveInQueue: (fromIndex, toIndex) =>
       queueEl() && queueEl().dispatch({ type: 'MOVE_ITEM', payload: { fromIndex, toIndex } }),
     removeFromQueue: (index) => queueEl() && queueEl().dispatch({ type: 'REMOVE_ITEM', payload: index }),
-    setQueueIndex: (index) => queueEl() && queueEl().dispatch({ type: 'SET_INDEX', payload: index }),
+    setQueueIndex: (index) => (release(), queueEl() && queueEl().dispatch({ type: 'SET_INDEX', payload: index })),
     clearQueue: () => {
       const q = queueEl();
       if (!q) return;
@@ -223,6 +284,7 @@
     },
     // Toca uma faixa imediatamente. Retorna 'navigate' quando não há fila e o main precisa abrir a URL.
     playSong: async (videoId) => {
+      release();
       const store = safe(() => queueEl().queue.store.store);
       if (!store || !getSong()) return 'navigate';
       try {

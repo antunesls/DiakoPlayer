@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Integração DiakoHub</title>
+<style>
+  :root { color-scheme: dark; --bg:#111418; --card:#1c2128; --pad:#2a313b; --muted:#a9b0bb; --accent:#f5a524; --ink:#1a1205; --ok:#9ee6b4; --err:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px; background:var(--bg); color:#f4f5f7; font:14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p { color:var(--muted); margin:0 0 14px; }
+  .card { background:var(--card); border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:10px 0 4px; letter-spacing:.3px; }
+  input { width:100%; background:var(--bg); border:2px solid var(--pad); border-radius:10px; color:#fff; padding:10px 12px; font:inherit; outline:none; }
+  input:focus { border-color:var(--accent); }
+  .acoes { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  button { border:0; border-radius:10px; padding:10px 16px; cursor:pointer; font:inherit; font-weight:600; background:var(--pad); color:#fff; }
+  button:hover { filter:brightness(1.15); }
+  button.primario { background:var(--accent); color:var(--ink); }
+  button:disabled { opacity:.5; cursor:default; }
+  .estado { display:flex; gap:8px; align-items:flex-start; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#6b7280; margin-top:5px; flex:none; }
+  .dot.ok { background:#34c759; } .dot.err { background:var(--err); }
+  .erro { color:var(--err); }
+  .dica { color:var(--muted); font-size:12px; }
+  ol { margin:6px 0 0; padding-left:18px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>Integração DiakoHub</h1>
+  <p>Mostra no controle (celular e navegador) a escala do louvor e as músicas escolhidas, e monta a fila com um toque. A música só começa quando alguém aperta <b>Tocar</b>.</p>
+
+  <div class="card">
+    <div class="estado"><span class="dot" id="dot"></span><div id="estado">Carregando…</div></div>
+  </div>
+
+  <form class="card" id="form" autocomplete="off">
+    <label for="url">Endereço do DiakoHub</label>
+    <input id="url" placeholder="https://diako.suaigreja.com.br ou http://192.168.0.10:8080" required>
+    <label for="usuario">Usuário</label>
+    <input id="usuario" placeholder="ex.: player" required autocomplete="off">
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" required autocomplete="new-password">
+    <div class="acoes">
+      <button class="primario" id="conectar">Conectar</button>
+      <button type="button" id="atualizar">Atualizar agora</button>
+      <button type="button" id="desconectar">Desconectar</button>
+    </div>
+    <p class="dica" style="margin:12px 0 0">A senha fica guardada cifrada neste PC, só para entrar de novo quando a sessão vencer.</p>
+  </form>
+
+  <div class="card dica">
+    Como preparar no DiakoHub:
+    <ol>
+      <li>Em <b>/admin › Usuários e perfis</b>, crie um usuário com o perfil <b>DiakoPlayer</b> (só lê escalas e repertório).</li>
+      <li>Em <b>/admin › DiakoPlayer</b>, informe o endereço deste controle para aparecer o botão “Abrir no DiakoPlayer” na escala.</li>
+      <li>No repertório, cada música precisa do <b>link do YouTube</b> para entrar na fila.</li>
+    </ol>
+  </div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const hora = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  let ocupado = false;
+
+  function render(i) {
+    if (i.url && document.activeElement !== $('url')) $('url').value = i.url;
+    if (i.usuario && document.activeElement !== $('usuario')) $('usuario').value = i.usuario;
+    $('dot').className = 'dot ' + (i.configured ? (i.error ? 'err' : 'ok') : '');
+    const linhas = [];
+    if (i.configured) {
+      linhas.push(`<b>Conectado</b> como ${esc(i.usuario)}${i.perfil ? ` (perfil ${esc(i.perfil)})` : ''}.`);
+      if (i.updatedAt) linhas.push(`${i.cultos} culto(s) a partir de hoje · ${i.musicas} música(s) no repertório · atualizado em ${hora(i.updatedAt)}.`);
+    } else {
+      linhas.push('Não conectado.');
+    }
+    if (i.error) linhas.push(`<span class="erro">${esc(i.error)}</span>`);
+    $('estado').innerHTML = linhas.join('<br>');
+    $('desconectar').disabled = !i.configured;
+    $('atualizar').disabled = !i.configured;
+    $('senha').required = !i.configured;
+    $('senha').placeholder = i.configured ? 'Digite só se quiser trocar' : '';
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  async function rodar(fn) {
+    if (ocupado) return;
+    ocupado = true;
+    document.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    $('estado').textContent = 'Aguarde…';
+    let r;
+    try {
+      r = await fn();
+    } catch (e) {
+      r = { ...(await diakoHub.info()), error: e.message };
+    }
+    ocupado = false;
+    document.querySelectorAll('button').forEach((b) => (b.disabled = false));
+    render(r);
+  }
+
+  $('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!$('senha').value) return rodar(() => diakoHub.refresh());
+    rodar(async () => {
+      const r = await diakoHub.connect({ url: $('url').value, usuario: $('usuario').value, senha: $('senha').value });
+      $('senha').value = '';
+      return r;
+    });
+  });
+  $('atualizar').addEventListener('click', () => rodar(() => diakoHub.refresh()));
+  $('desconectar').addEventListener('click', () => rodar(() => diakoHub.disconnect()));
+
+  diakoHub.info().then(render);
+</script>
+</body>
+</html>

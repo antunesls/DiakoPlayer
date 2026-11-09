@@ -39,7 +39,7 @@ function clientId() {
 const S = {
   conn: null, // {id, name, url}
   token: null,
-  features: { diako: false, playSong: false },
+  features: { diako: false, playSong: false, culto: false },
   song: null,
   isPlaying: false,
   position: 0,
@@ -57,6 +57,12 @@ const S = {
   volTouchedAt: -1e9,
   queue: [],
   connectSeq: 0,
+  cultoData: null, // resposta de GET /api/v1/culto (louvor do DiakoHub)
+  cultoAt: 0,
+  cultoSel: null, // id do culto escolhido (ou vindo do link #culto=ID do painel)
+  cultoFromLink: false,
+  repertorio: null,
+  searchSrc: 'yt', // 'yt' = YouTube Music; 'rep' = repertório da igreja
 };
 
 // ---------------- utilidades ----------------
@@ -213,23 +219,27 @@ function renderConn() {
 async function connect(conn) {
   const seq = ++S.connectSeq;
   closeSocket();
-  Object.assign(S, { conn, token: tokens()[conn.url] || null, song: null, online: false, queue: [], volume: null });
+  Object.assign(S, { conn, token: tokens()[conn.url] || null, song: null, online: false, queue: [], volume: null, cultoData: null, repertorio: null });
   store.set('active', conn.id);
   renderConn();
   render();
   // Descobre se é um DiakoPlayer (endpoints extras) ou um pear-desktop.
   try {
     const info = await api('GET', '/api/v1/info', undefined, { noAuth: true, timeout: 4000 });
-    S.features = { diako: info?.app === 'diakoplayer', playSong: (info?.features || []).includes('play-song') };
+    const f = info?.features || [];
+    S.features = { diako: info?.app === 'diakoplayer', playSong: f.includes('play-song'), culto: f.includes('culto') };
   } catch {
-    S.features = { diako: false, playSong: false };
+    S.features = { diako: false, playSong: false, culto: false };
   }
   if (seq !== S.connectSeq) return;
+  applyFeatures();
+  if (S.cultoFromLink && S.features.culto) setTab('culto');
   try {
     await refreshSong();
     await refreshExtras();
     openSocket();
     loadQueue(true);
+    loadCulto();
   } catch (e) {
     toast(e.message, true);
   }
@@ -400,7 +410,10 @@ function render() {
     $('artEmpty').hidden = !!art;
     if (art) $('art').src = art;
   }
-  $('nowLabel').textContent = !s ? 'PLAYER' : s.isAd ? 'ANÚNCIO' : S.isPlaying ? 'TOCANDO AGORA' : 'PAUSADO';
+  const lv = louvorPos(s?.videoId);
+  $('nowLabel').textContent =
+    (!s ? 'PLAYER' : s.isAd ? 'ANÚNCIO' : S.isPlaying ? 'TOCANDO AGORA' : 'PAUSADO') +
+    (lv && !s.isAd ? ` · LOUVOR ${lv.ordem}/${lv.total}${lv.tom ? ' · TOM ' + lv.tom : ''}` : '');
 
   $('playIcon').setAttribute('href', S.isPlaying ? '#i-pause' : '#i-play');
   $('playLabel').textContent = S.isPlaying ? 'PAUSAR' : 'TOCAR';
@@ -427,6 +440,7 @@ function render() {
   tickProgress();
   renderConn();
   markCurrentInQueue();
+  markCurrentInCulto();
   renderUpNext();
 }
 
@@ -856,6 +870,264 @@ function renderResults(items) {
   }
 }
 
+// ---------------- culto (escala do louvor no DiakoHub) ----------------
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const hojeIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const quando = (iso) =>
+  iso ? new Date(iso).toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+function applyFeatures() {
+  document.querySelectorAll('[data-needs="culto"]').forEach((e) => (e.hidden = !S.features.culto));
+  if (!S.features.culto) {
+    S.searchSrc = 'yt';
+    paintSrc();
+    if (document.body.dataset.tab === 'culto') setTab('player');
+  }
+}
+
+function cultoAtual() {
+  const list = S.cultoData?.cultos || [];
+  return list.find((c) => c.id === S.cultoSel) || list[0] || null;
+}
+
+/** Posição da música tocando no louvor escolhido (para o rótulo "LOUVOR 2/5 · TOM D"). */
+function louvorPos(videoId) {
+  const c = videoId && cultoAtual();
+  const i = c ? c.musicas.findIndex((m) => m.videoId === videoId) : -1;
+  return i < 0 ? null : { ordem: i + 1, total: c.musicas.length, tom: c.musicas[i].tom };
+}
+
+let cultoLoading = false;
+async function loadCulto({ refresh = false, quiet = true } = {}) {
+  if (!S.conn || !S.features.culto || cultoLoading) return;
+  if (!refresh && S.cultoData && performance.now() - S.cultoAt < 60000) return renderCulto();
+  cultoLoading = true;
+  if (!S.cultoData) renderCulto();
+  try {
+    S.cultoData = await api('GET', `/api/v1/culto${refresh ? '?refresh=1' : ''}`, undefined, { timeout: 25000 });
+    S.cultoAt = performance.now();
+    if (refresh) S.repertorio = null;
+    const list = S.cultoData.cultos || [];
+    if (S.cultoFromLink && S.cultoData.configured && S.cultoSel && !list.some((c) => c.id === S.cultoSel)) {
+      toast('Esse culto não está entre os próximos da escala.', true);
+      S.cultoSel = null;
+    }
+    S.cultoFromLink = false;
+  } catch (e) {
+    if (!quiet) toast(e.message, true);
+  } finally {
+    cultoLoading = false;
+  }
+  renderCulto();
+  render();
+}
+
+function renderCulto() {
+  const body = $('cultoBody');
+  const sel = $('cultoSel');
+  const d = S.cultoData;
+  body.textContent = '';
+  sel.textContent = '';
+  sel.hidden = true;
+  const vazio = (texto, dica) => {
+    const box = el('div', 'empty', texto);
+    if (dica) box.append(el('p', 'hint', dica));
+    body.append(box);
+  };
+  if (!d) return vazio(cultoLoading ? 'Carregando o culto…' : S.conn ? 'Sem dados do culto.' : 'Conecte-se a um player.');
+  if (!d.configured) {
+    return vazio(
+      'A integração com o DiakoHub ainda não foi configurada neste player.',
+      'No PC do som: menu DiakoPlayer › Integração DiakoHub, com um usuário de perfil DiakoPlayer.',
+    );
+  }
+  const list = d.cultos || [];
+  if (!list.length) {
+    return vazio(d.error ? `Sem resposta do DiakoHub: ${d.error}` : 'Nenhum culto na escala de hoje em diante.');
+  }
+  const c = cultoAtual();
+  for (const x of list) {
+    const o = el('option', '', `${x.rotulo} · ${x.horaTexto} · ${x.nome}`);
+    o.value = x.id;
+    sel.append(o);
+  }
+  sel.value = c.id;
+  sel.hidden = false;
+
+  if (d.error) {
+    body.append(el('p', 'culto-aviso warn', `Sem conexão com o DiakoHub agora. Mostrando a cópia de ${quando(d.updatedAt)}.`));
+  }
+
+  const card = el('div', 'card culto-card');
+  const hoje = c.data === hojeIso();
+  card.append(
+    el('div', 'eyebrow accent', `${hoje ? 'HOJE' : c.rotulo.toUpperCase()} · ${c.horaTexto}${c.ceia ? ' · SANTA CEIA' : ''}`),
+    el('div', 'culto-nome', c.nome),
+  );
+  if (c.tema) card.append(el('div', 'culto-tema', c.tema));
+  if (c.equipe.length) {
+    const eq = el('div', 'culto-equipe');
+    for (const f of c.equipe) {
+      const span = el('span');
+      span.append(el('b', '', `${f.funcao}: `), document.createTextNode(f.nomes.join(', ')));
+      eq.append(span);
+    }
+    card.append(eq);
+  }
+  body.append(card);
+
+  const tocaveis = c.musicas.filter((m) => m.videoId);
+  if (c.musicas.length) {
+    const btn = el('button', 'pad primary culto-load');
+    btn.type = 'button';
+    btn.id = 'cultoLoad';
+    btn.disabled = !tocaveis.length || loadingSetlist;
+    btn.append(document.createTextNode(loadingSetlist ? 'Montando a fila…' : 'Montar a fila do louvor'));
+    if (!loadingSetlist) btn.append(el('small', '', `${tocaveis.length} ${tocaveis.length === 1 ? 'música' : 'músicas'}`));
+    btn.addEventListener('click', () => montarFila(c));
+    body.append(btn);
+    body.append(el('p', 'culto-aviso', 'Troca a fila do player pelas músicas abaixo e deixa a 1ª pronta, pausada. Aperte TOCAR na hora do louvor.'));
+    const faltam = c.musicas.length - tocaveis.length;
+    if (faltam) {
+      body.append(el('p', 'culto-aviso warn', `${faltam} ${faltam === 1 ? 'música está' : 'músicas estão'} sem link do YouTube no repertório e não ${faltam === 1 ? 'entra' : 'entram'} na fila.`));
+    }
+    if (S.shuffle) body.append(el('p', 'culto-aviso warn', 'O aleatório está ligado: desligue para tocar na ordem da escala.'));
+  } else {
+    body.append(el('div', 'empty', 'O ministro ainda não escolheu as músicas deste culto.'));
+  }
+
+  const ol = el('ol', 'setlist');
+  for (const m of c.musicas) {
+    const li = el('li', 'song' + (m.videoId ? '' : ' missing'));
+    if (m.videoId) li.dataset.videoId = m.videoId;
+    const text = el('div', 'item-text');
+    const sub = m.videoId ? [m.cantor, m.bpm && `${m.bpm} BPM`].filter(Boolean).join(' • ') : 'sem link do YouTube no repertório';
+    text.append(el('div', 'item-title', m.titulo), el('div', 'item-sub', sub));
+    const tom = el('div', 'tom' + (m.tom ? '' : ' none'), m.tom || 'tom ?');
+    tom.title = m.tom ? `Tom: ${m.tom}` : 'Tom não definido';
+    const actions = el('div', 'item-actions');
+    if (m.videoId) {
+      actions.append(
+        iconBtn('i-playnext', 'Tocar a seguir', () => enqueue(m.videoId, 'INSERT_AFTER_CURRENT_VIDEO')),
+        iconBtn('i-add', 'Adicionar ao fim da fila', () => enqueue(m.videoId, 'INSERT_AT_END')),
+      );
+    } else {
+      actions.append(iconBtn('i-search', 'Buscar no YouTube Music', () => searchFor(`${m.titulo} ${m.cantor}`.trim())));
+    }
+    li.append(el('span', 'ord', String(m.ordem)), text, tom, actions);
+    ol.append(li);
+  }
+  body.append(ol);
+  if (d.updatedAt) body.append(el('p', 'hint', `Escala do DiakoHub, atualizada ${quando(d.updatedAt)}.`));
+  markCurrentInCulto();
+}
+
+function markCurrentInCulto() {
+  const id = S.song?.videoId;
+  document.querySelectorAll('#cultoBody .song').forEach((li) => li.classList.toggle('current', !!id && li.dataset.videoId === id));
+}
+
+let loadingSetlist = false;
+async function montarFila(c) {
+  const ids = c.musicas.filter((m) => m.videoId).map((m) => m.videoId);
+  if (!ids.length || loadingSetlist) return;
+  const pergunta = S.isPlaying
+    ? 'Isso PARA a música que está tocando e troca a fila pelas músicas do louvor. Continuar?'
+    : S.queue.length
+      ? 'Trocar a fila atual pelas músicas do louvor?'
+      : null;
+  if (pergunta && !confirm(pergunta)) return;
+  loadingSetlist = true;
+  renderCulto();
+  try {
+    const r = await api('POST', '/api/v1/queue/load', { videoIds: ids }, { timeout: 60000 });
+    toast(`Fila pronta: ${r?.loaded ?? ids.length} músicas. Aperte TOCAR na hora do louvor.`);
+    setTimeout(() => loadQueue(true), 800);
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    loadingSetlist = false;
+    renderCulto();
+  }
+}
+
+// Busca no repertório da igreja (lista que o PC trouxe do DiakoHub).
+function paintSrc() {
+  document.querySelectorAll('#srcToggle [data-src]').forEach((b) => b.classList.toggle('on', b.dataset.src === S.searchSrc));
+  $('searchInput').placeholder = S.searchSrc === 'rep' ? 'Título ou cantor do repertório' : 'Músicas, artistas ou link do YouTube';
+}
+
+async function searchRepertorio(q) {
+  const list = $('searchList');
+  if (!S.conn) return openSettings();
+  if (!S.repertorio) {
+    list.textContent = '';
+    list.append(el('li', 'empty', 'Carregando o repertório…'));
+    try {
+      const r = await api('GET', '/api/v1/repertorio', undefined, { timeout: 15000 });
+      if (!r?.configured) throw new Error('A integração com o DiakoHub não está configurada no player.');
+      S.repertorio = r.musicas || [];
+    } catch (e) {
+      list.textContent = '';
+      list.append(el('li', 'empty', e.message));
+      return;
+    }
+  }
+  const words = norm(q).split(/\s+/).filter(Boolean);
+  const found = S.repertorio.filter((m) => {
+    const h = norm(`${m.titulo} ${m.cantor}`);
+    return words.every((w) => h.includes(w));
+  });
+  list.textContent = '';
+  if (!found.length) {
+    list.append(el('li', 'empty', 'Nenhuma música do repertório encontrada.'));
+    return;
+  }
+  for (const m of found.slice(0, 100)) {
+    const li = el('li', 'item');
+    const text = el('div', 'item-text');
+    const sub = [m.cantor, m.bpm && `${m.bpm} BPM`, !m.videoId && 'sem link do YouTube'].filter(Boolean).join(' • ');
+    text.append(el('div', 'item-title', m.titulo), el('div', 'item-sub', sub));
+    const tom = el('div', 'tom' + (m.tom ? '' : ' none'), m.tom || 'tom ?');
+    const actions = el('div', 'item-actions');
+    if (m.videoId) {
+      actions.append(
+        iconBtn('i-playnext', 'Tocar a seguir', () => enqueue(m.videoId, 'INSERT_AFTER_CURRENT_VIDEO')),
+        iconBtn('i-add', 'Adicionar ao fim da fila', () => enqueue(m.videoId, 'INSERT_AT_END')),
+      );
+      li.title = 'Tocar agora';
+      li.addEventListener('click', () => playNow(m.videoId));
+    } else {
+      actions.append(iconBtn('i-search', 'Buscar no YouTube Music', () => searchFor(`${m.titulo} ${m.cantor}`.trim())));
+    }
+    li.append(thumbImg(m.videoId ? `https://i.ytimg.com/vi/${m.videoId}/mqdefault.jpg` : ''), text, tom, actions);
+    list.append(li);
+  }
+}
+
+function searchFor(q) {
+  S.searchSrc = 'yt';
+  paintSrc();
+  setTab('search');
+  $('searchInput').value = q;
+  search(q);
+}
+
+function applyHash() {
+  const m = location.hash.match(/culto=([^&]+)/);
+  if (!m) return;
+  S.cultoSel = decodeURIComponent(m[1]);
+  S.cultoFromLink = true;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (S.features.culto) {
+    setTab('culto');
+    loadCulto();
+  }
+}
+
 // ---------------- configurações ----------------
 function openSettings() {
   renderConnList();
@@ -971,6 +1243,7 @@ function setTab(tab) {
     if (b.tagName === 'BUTTON') b.classList.toggle('on', b.dataset.tab === tab || (tab === 'player' && b.dataset.tab === 'queue' && b.classList.contains('ptab')));
   });
   if (tab === 'queue') loadQueue(true);
+  if (tab === 'culto') loadCulto();
   if (tab === 'search') setTimeout(() => $('searchInput').focus(), 50);
 }
 
@@ -1028,9 +1301,30 @@ function bind() {
   $('searchForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const q = $('searchInput').value.trim();
-    if (q) search(q);
+    if (S.searchSrc === 'rep') searchRepertorio(q);
+    else if (q) search(q);
     $('searchInput').blur();
   });
+  $('searchInput').addEventListener('input', () => {
+    if (S.searchSrc === 'rep') searchRepertorio($('searchInput').value.trim());
+  });
+  document.querySelectorAll('#srcToggle [data-src]').forEach((b) =>
+    b.addEventListener('click', () => {
+      S.searchSrc = b.dataset.src;
+      paintSrc();
+      $('searchList').textContent = '';
+      if (S.searchSrc === 'rep') searchRepertorio($('searchInput').value.trim());
+      $('searchInput').focus();
+    }),
+  );
+
+  $('cultoSel').addEventListener('change', (e) => {
+    S.cultoSel = e.target.value;
+    renderCulto();
+    render();
+  });
+  $('cultoRefresh').addEventListener('click', () => loadCulto({ refresh: true, quiet: false }));
+  window.addEventListener('hashchange', applyHash);
 
   $('settingsBtn').addEventListener('click', openSettings);
   $('connBtn').addEventListener('click', openSettings);
@@ -1088,7 +1382,9 @@ async function boot() {
   setTab('player');
   render();
   setInterval(tickProgress, 250);
+  setInterval(() => loadCulto(), 5 * 60 * 1000);
   pollLoop();
+  applyHash();
   if (store.get('keepAwake', false)) applyKeepAwake(true);
 
   // Página servida pelo próprio DiakoPlayer? Conecta nele automaticamente.

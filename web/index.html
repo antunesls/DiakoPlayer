@@ -43,6 +43,7 @@
     <symbol id="i-playnext" viewBox="0 0 24 24"><path d="M2 5h12v2H2zm0 4h12v2H2zm0 4h8v2H2zm14-4v4h-4v2h4v4h2v-4h4v-2h-4V9z"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
+    <symbol id="i-culto" viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18A3 3 0 1 0 19 17V8h3V6h-5z"/></symbol>
     <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-4a5 5 0 0 0-3.54 8.54l1.42-1.42a3 3 0 1 1 4.24 0l1.42 1.42A5 5 0 0 0 12 7zm0-4a9 9 0 0 0-6.36 15.36l1.41-1.41a7 7 0 1 1 9.9 0l1.41 1.41A9 9 0 0 0 12 3z"/></symbol>
   </defs>
 </svg>
@@ -126,9 +127,19 @@
 
   <section class="view panel" id="view-panel">
     <nav class="panel-tabs">
+      <button data-tab="culto" class="ptab" data-needs="culto" hidden>Culto</button>
       <button data-tab="queue" class="ptab">Fila</button>
       <button data-tab="search" class="ptab">Buscar</button>
     </nav>
+
+    <div class="pane" id="pane-culto">
+      <div class="pane-head">
+        <select id="cultoSel" class="culto-sel" aria-label="Culto"></select>
+        <span class="spacer"></span>
+        <button class="chip" id="cultoRefresh"><svg><use href="#i-refresh"/></svg>Atualizar</button>
+      </div>
+      <div class="culto-body" id="cultoBody"></div>
+    </div>
 
     <div class="pane" id="pane-queue">
       <div class="pane-head">
@@ -145,6 +156,10 @@
         <svg><use href="#i-search"/></svg>
         <input type="search" id="searchInput" placeholder="Músicas, artistas ou link do YouTube" enterkeyhint="search">
       </form>
+      <div class="src-toggle" id="srcToggle" data-needs="culto" hidden role="group" aria-label="Onde buscar">
+        <button type="button" class="chip on" data-src="yt">YouTube Music</button>
+        <button type="button" class="chip" data-src="rep">Repertório da igreja</button>
+      </div>
       <ol class="list" id="searchList"></ol>
     </div>
   </section>
@@ -152,6 +167,7 @@
 
 <nav class="tabbar">
   <button data-tab="player"><svg><use href="#i-music"/></svg><span>Controle</span></button>
+  <button data-tab="culto" data-needs="culto" hidden><svg><use href="#i-culto"/></svg><span>Culto</span></button>
   <button data-tab="queue"><svg><use href="#i-queue"/></svg><span>Fila</span></button>
   <button data-tab="search"><svg><use href="#i-search"/></svg><span>Buscar</span></button>
 </nav>

@@ -17,6 +17,8 @@ const DEFAULTS = {
   minimizeToTray: true,
   autoDismissYouThere: true,
   window: { width: 1280, height: 800 },
+  // Integração com o DiakoHub: {url, usuario, token, senha (cifrada com safeStorage), perfil}.
+  diakohub: {},
 };
 
 let file;

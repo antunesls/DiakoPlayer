@@ -30,9 +30,11 @@ const MIME = {
  * @param {(id: string, address: string) => Promise<boolean>} deps.askApproval
  * @param {string} deps.webRoot
  * @param {string} deps.version
+ * @param {ReturnType<import('./diakohub').createHub>} deps.hub  escala e repertório do DiakoHub
+ * @param {(videoIds: string[]) => Promise<object>} deps.loadSetlist  monta a fila sem tocar
  */
 function createServer(deps) {
-  const { getConfig, setConfig, rpc, getState, navigateToSong, askApproval, webRoot, version } = deps;
+  const { getConfig, setConfig, rpc, getState, navigateToSong, askApproval, webRoot, version, hub, loadSetlist } = deps;
 
   // ---------- autenticação (token = id.hmac) ----------
   const sign = (id) => {
@@ -122,7 +124,25 @@ function createServer(deps) {
     return [204];
   };
 
-  route('GET', `${API}/info`, () => [200, { app: 'diakoplayer', version, authEnabled: getConfig().authEnabled, features: ['play-song'] }]);
+  route('GET', `${API}/info`, () => [
+    200,
+    { app: 'diakoplayer', version, authEnabled: getConfig().authEnabled, features: ['play-song', 'culto', 'load-queue'] },
+  ]);
+
+  // ---------- extensões do DiakoPlayer: louvor do DiakoHub ----------
+  route('GET', `${API}/culto`, async ({ query }) => {
+    if (query.get('refresh') === '1') await hub.refresh();
+    return [200, hub.culto()];
+  });
+  route('GET', `${API}/repertorio`, () => [200, { configured: hub.info().configured, musicas: hub.repertorio() }]);
+  // Troca a fila pelas músicas indicadas, na ordem, e deixa a 1ª pronta e PAUSADA (alguém dá o play).
+  route('POST', `${API}/queue/load`, async ({ body }) => {
+    const ids = Array.isArray(body.videoIds) ? body.videoIds.map(String) : [];
+    if (!ids.length || ids.length > 50 || !ids.every((id) => /^[\w-]{11}$/.test(id))) {
+      throw Object.assign(new Error('videoIds deve ser uma lista de 1 a 50 IDs do YouTube'), { status: 400 });
+    }
+    return [200, await loadSetlist(ids)];
+  });
 
   route('POST', `${API}/previous`, noContent(() => rpc('previous')));
   route('POST', `${API}/next`, noContent(() => rpc('next')));
