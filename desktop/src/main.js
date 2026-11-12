@@ -17,6 +17,7 @@ const QRCode = require('qrcode');
 const config = require('./config');
 const { createServer } = require('./server');
 const { createHub } = require('./diakohub');
+const { loginWithChrome } = require('./chromelogin');
 const { startDiscovery, lanAddresses } = require('./discovery');
 
 const VERSION = app.getVersion();
@@ -122,9 +123,23 @@ function createWindow() {
   win.webContents.on('did-navigate', rememberUrl);
   win.webContents.on('did-navigate-in-page', rememberUrl);
 
-  // Links externos abrem no navegador padrão; login do Google fica dentro do app.
+  // Login do Google dentro do Electron é bloqueado: redireciona para o fluxo via Chrome.
+  const GOOGLE_LOGIN = /^https:\/\/accounts\.google\.com\//;
+  const interceptLogin = (e, url) => {
+    if (!GOOGLE_LOGIN.test(url)) return;
+    e.preventDefault();
+    signInViaChrome();
+  };
+  win.webContents.on('will-navigate', interceptLogin);
+  win.webContents.on('will-redirect', interceptLogin);
+
+  // Links externos abrem no navegador padrão.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\/(accounts\.google\.com|music\.youtube\.com)/.test(url)) return { action: 'allow' };
+    if (GOOGLE_LOGIN.test(url)) {
+      signInViaChrome();
+      return { action: 'deny' };
+    }
+    if (/^https:\/\/music\.youtube\.com/.test(url)) return { action: 'allow' };
     shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -295,12 +310,33 @@ function updateTray() {
   );
 }
 
+let signingIn = false;
+async function signInViaChrome() {
+  if (signingIn) return;
+  signingIn = true;
+  try {
+    await dialog.showMessageBox(win, {
+      type: 'info',
+      message: 'Vai abrir uma janela do Google Chrome.',
+      detail: 'Faça login na sua conta do YouTube Premium lá, confira que o YouTube Music abriu logado e então FECHE a janela do Chrome. Aí o DiakoPlayer importa a sessão.',
+    });
+    const n = await loginWithChrome({ userDataDir: app.getPath('userData'), session: win.webContents.session });
+    win.loadURL('https://music.youtube.com/');
+    dialog.showMessageBox(win, { type: 'info', message: `Login concluído (${n} cookies importados).` });
+  } catch (e) {
+    dialog.showErrorBox('Login via Chrome', e.message);
+  } finally {
+    signingIn = false;
+  }
+}
+
 function buildAppMenu() {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
         label: 'DiakoPlayer',
         submenu: [
+          { label: 'Entrar no YouTube Music (via Chrome)…', click: signInViaChrome },
           { label: 'Conectar celular (QR code)…', accelerator: 'CmdOrCtrl+Shift+C', click: openPairWindow },
           { label: 'Integração DiakoHub (escala do louvor)…', click: openHubWindow },
           {
